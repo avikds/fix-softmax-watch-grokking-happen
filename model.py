@@ -1239,7 +1239,7 @@ def softmax_fix_report(
             rng.normal(
                 0.0,
                 5.0,
-                size=(4, p),
+                size=(64, p),
             ).astype(np.float32)
         )
 
