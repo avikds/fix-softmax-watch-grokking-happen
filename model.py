@@ -484,3 +484,26 @@ def residual_gradient(teacher_logits, temperature=1.0, precision="fp32"):
         "fixed": fixed_residual,
     }
 
+# Step 17 - init_adamw_state
+def init_adamw_state(params):
+    # Initialize first-moment buffers, one for each parameter.
+    m = [
+        Tensor.zeros(*p.shape).contiguous().realize()
+        for p in params
+    ]
+
+    # Initialize second-moment buffers, one for each parameter.
+    v = [
+        Tensor.zeros(*p.shape).contiguous().realize()
+        for p in params
+    ]
+
+    # Initialize the AdamW step counter as a realized scalar tensor.
+    t = Tensor([0.0]).contiguous().realize()
+
+    return {
+        "m": m,
+        "v": v,
+        "t": t,
+    }
+
