@@ -370,3 +370,11 @@ def cross_entropy_stablemax(logits, targets):
 
     return loss, grad
 
+# Step 13 - zero_sum_projection
+def zero_sum_projection(grad):
+    # Compute the mean gradient across the class dimension for each example.
+    mean_grad = grad.mean(axis=-1, keepdim=True)
+
+    # Subtract the mean so that each example's gradients sum to zero.
+    return grad - mean_grad
+

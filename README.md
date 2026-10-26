@@ -22,6 +22,7 @@ python scaffold.py
 - [x] **10.** logit_margin
 - [x] **11.** cross_entropy_fixed
 - [x] **12.** cross_entropy_stablemax
+- [x] **13.** zero_sum_projection
 
 ---
 
