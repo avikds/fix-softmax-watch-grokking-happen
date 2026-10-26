@@ -378,3 +378,26 @@ def zero_sum_projection(grad):
     # Subtract the mean so that each example's gradients sum to zero.
     return grad - mean_grad
 
+# Step 14 - soft_cross_entropy_standard
+def soft_cross_entropy_standard(
+    student_logits,
+    teacher_logits,
+    temperature=1.0,
+    precision="fp32",
+):
+    # Quantization function for the requested precision.
+    Q = lambda v: quantize(v, precision)
+
+    # Compute the teacher's soft probability distribution.
+    p = Q((teacher_logits / temperature).softmax(axis=-1))
+
+    # Compute the student's log-probability distribution.
+    log_q = Q((student_logits / temperature).log_softmax(axis=-1))
+
+    # Standard soft-target cross-entropy, one loss per example.
+    loss = -(p * log_q).sum(axis=-1)
+
+    # Return None for the hand-written gradient so that tinygrad
+    # computes the gradient through automatic differentiation.
+    return loss, None
+

@@ -23,6 +23,7 @@ python scaffold.py
 - [x] **11.** cross_entropy_fixed
 - [x] **12.** cross_entropy_stablemax
 - [x] **13.** zero_sum_projection
+- [x] **14.** soft_cross_entropy_standard
 
 ---
 

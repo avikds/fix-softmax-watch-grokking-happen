@@ -221,7 +221,7 @@
               
             </div>
           
-            <div class="part-reveal" style="opacity: 0.6">
+            <div class="part-reveal" style="opacity: 1">
               <h3 class="part-title">Part 3: Soft Targets and Softmax Cancellation</h3>
               <p class="part-description">The distillation loss between a student&#39;s and a teacher&#39;s logits in both forms: the standard soft-target cross-entropy, whose autodiff gradient at identical logits is a difference of nearly equal numbers that does not vanish (about 1e-8 in fp32, far larger in bf16), and the paper&#39;s equation 9, a log-space gradient built from expm1 and log1p that returns exactly 0 when student and teacher agree, applied as a custom backward under the unchanged forward loss. A probe that measures both residuals.</p>
               
