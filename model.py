@@ -289,3 +289,20 @@ def cross_entropy_standard(logits, targets, precision="fp32"):
 
     return loss, grad
 
+# Step 10 - logit_margin
+def logit_margin(logits, targets):
+    # Extract the target logit for each row.
+    # For one-hot targets, this selects the logit of the correct class.
+    z_t = (logits * targets).sum(axis=-1)
+
+    # Mask the target class so that only the other logits contribute.
+    # The large negative value makes its exponential negligible.
+    others = (targets > 0).where(-1e30, logits)
+
+    # Compute the log-sum-exp of all non-target logits.
+    logsumexp_others = others.logsumexp(axis=-1)
+
+    # Return the target logit minus the log-sum-exp of the other logits.
+    # The resulting Tensor has shape (n,).
+    return z_t - logsumexp_others
+
