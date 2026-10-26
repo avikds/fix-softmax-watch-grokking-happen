@@ -900,3 +900,65 @@ def slingshot_experiment(
 
     return results
 
+# Step 23 - equilibrium_experiment
+def equilibrium_experiment(
+    seed=0,
+    eps_values=(1e-8, 1e-12),
+    steps=2500,
+    precision="fp32",
+    p=31,
+    d_model=64,
+    n_heads=4,
+    lr=3e-3,
+    weight_decay=1.0,
+    train_frac=0.5,
+    eval_every=100,
+    precomputed=None,
+):
+    # Create the shared dataset for this seed.
+    data = modular_addition_dataset(
+        p=p,
+        train_frac=train_frac,
+        seed=seed,
+    )
+
+    results = {}
+
+    for eps in eps_values:
+        # Reuse an existing history when the requested epsilon is present.
+        if precomputed is not None and eps in precomputed:
+            history = precomputed[eps]
+        else:
+            # Create a fresh model for this epsilon.
+            model = GrokTransformer(
+                p,
+                d_model=d_model,
+                n_heads=n_heads,
+                seed=seed,
+            )
+
+            # Train using the fixed cross-entropy loss.
+            history = train_run(
+                model=model,
+                loss_fn=cross_entropy_fixed,
+                data=data,
+                steps=steps,
+                lr=lr,
+                weight_decay=weight_decay,
+                eps=eps,
+                precision=precision,
+                eval_every=eval_every,
+            )
+
+        # Summarize the measured margin, gradient collapse, accuracy,
+        # loss spikes, and theoretical equilibrium margin.
+        results[eps] = {
+            "final_margin": float(history["final_margin"]),
+            "max_zero_target": int(history["max_zero_target"]),
+            "final_test_acc": float(history["final_test_acc"]),
+            "spikes": find_spikes(history["loss"]),
+            "log_inv_eps": float(math.log(1 / eps)),
+        }
+
+    return results
+

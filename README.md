@@ -32,6 +32,7 @@ python scaffold.py
 - [x] **20.** train_run
 - [x] **21.** find_spikes
 - [x] **22.** slingshot_experiment
+- [x] **23.** equilibrium_experiment
 
 ---
 
