@@ -401,3 +401,47 @@ def soft_cross_entropy_standard(
     # computes the gradient through automatic differentiation.
     return loss, None
 
+# Step 15 - soft_cross_entropy_fixed
+def soft_cross_entropy_fixed(
+    student_logits,
+    teacher_logits,
+    temperature=1.0,
+    precision="fp32",
+):
+    T = temperature
+
+    # Quantize values to the requested emulated precision.
+    Q = lambda v: quantize(v, precision)
+
+    # Preserve exactly the standard soft-target loss for the forward pass.
+    loss, _ = soft_cross_entropy_standard(
+        student_logits,
+        teacher_logits,
+        temperature=T,
+        precision=precision,
+    )
+
+    # Teacher and student probability distributions.
+    p = Q((teacher_logits / T).softmax(axis=-1))
+    q = Q((student_logits / T).softmax(axis=-1))
+
+    # Difference between student and teacher logits.
+    delta = Q((student_logits - teacher_logits) / T)
+
+    # Center the difference using the teacher distribution.
+    d = delta - (p * delta).sum(axis=-1, keepdim=True)
+
+    # Stable log-space correction using log1p and expm1.
+    s = d - stable_log1p(
+        (p * stable_expm1(d)).sum(axis=-1, keepdim=True)
+    )
+
+    # Construct the corrected probability difference.
+    u = p * stable_expm1(s)
+
+    # Custom gradient: the subtraction removes the row-sum component,
+    # ensuring the gradient sums to zero across classes.
+    grad = (u - q * u.sum(axis=-1, keepdim=True)) / T
+
+    return loss, grad
+
