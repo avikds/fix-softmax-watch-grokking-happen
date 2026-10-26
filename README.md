@@ -28,6 +28,7 @@ python scaffold.py
 - [x] **16.** residual_gradient
 - [x] **17.** init_adamw_state
 - [x] **18.** adamw_update
+- [x] **19.** GrokTrainer
 
 ---
 
