@@ -693,3 +693,125 @@ class GrokTrainer:
 
         return snapshot
 
+# Step 20 - train_run
+def train_run(
+    model,
+    loss_fn,
+    data,
+    steps,
+    lr=3e-3,
+    weight_decay=1.0,
+    eps=1e-8,
+    precision="fp32",
+    eval_every=100,
+):
+    if eval_every <= 0:
+        raise ValueError("eval_every must be a positive integer.")
+
+    p = data["p"]
+
+    # One-hot encode the training inputs and labels.
+    x_train, y_train = one_hot_batch(
+        data["x_train"], data["y_train"], p
+    )
+
+    # Realize the full training batch as tinygrad tensors.
+    X = Tensor(x_train).realize()
+    T = Tensor(y_train).realize()
+
+    # One-hot encode the test inputs. The test labels remain integer labels.
+    x_test, _ = one_hot_batch(
+        data["x_test"], data["y_test"], p
+    )
+    X_test = Tensor(x_test).realize()
+
+    # Initialize the trainer and its AdamW state.
+    trainer = GrokTrainer(
+        model,
+        loss_fn,
+        lr=lr,
+        weight_decay=weight_decay,
+        eps=eps,
+        precision=precision,
+    )
+
+    # Histories for training diagnostics and test accuracy.
+    loss = []
+    margin_mean = []
+    margin_min = []
+    n_zero_target = []
+    test_acc = []
+
+    # Full-batch training loop.
+    for s in range(steps):
+        stats = trainer.step(X, T)
+
+        # The four statistics are:
+        # [mean loss, mean margin, minimum margin, zero target gradients].
+        loss.append(float(stats[0]))
+        margin_mean.append(float(stats[1]))
+        margin_min.append(float(stats[2]))
+        n_zero_target.append(int(stats[3]))
+
+        # Evaluate at regular intervals and on the final training step.
+        if (s + 1) % eval_every == 0 or s == steps - 1:
+            predictions = trainer.predict(X_test)
+            test_accuracy = float(
+                (predictions == data["y_test"]).mean()
+            )
+            test_acc.append((s + 1, test_accuracy))
+
+    # Compute the final evaluation summaries.
+    final_test_acc = (
+        test_acc[-1][1] if test_acc else float("nan")
+    )
+
+    # The jitted predictor uses the test-batch shape. Evaluate the training
+    # split using the existing plain-forward accuracy function instead.
+    final_train_acc = accuracy(
+        model,
+        data["x_train"],
+        data["y_train"],
+        p,
+    )
+
+    # Average the last 100 recorded mean margins, or all if fewer.
+    final_margin = (
+        float(np.mean(margin_mean[-100:]))
+        if margin_mean
+        else float("nan")
+    )
+
+    max_margin = (
+        float(max(margin_mean))
+        if margin_mean
+        else float("nan")
+    )
+
+    max_zero_target = (
+        int(max(n_zero_target))
+        if n_zero_target
+        else 0
+    )
+
+    final_zero_target = (
+        int(n_zero_target[-1])
+        if n_zero_target
+        else 0
+    )
+
+    return {
+        "loss": loss,
+        "margin_mean": margin_mean,
+        "margin_min": margin_min,
+        "n_zero_target": n_zero_target,
+        "test_acc": test_acc,
+        "final_test_acc": final_test_acc,
+        "final_train_acc": final_train_acc,
+        "final_margin": final_margin,
+        "max_margin": max_margin,
+        "max_zero_target": max_zero_target,
+        "final_zero_target": final_zero_target,
+        "trainer": trainer,
+    }
+

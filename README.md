@@ -29,6 +29,7 @@ python scaffold.py
 - [x] **17.** init_adamw_state
 - [x] **18.** adamw_update
 - [x] **19.** GrokTrainer
+- [x] **20.** train_run
 
 ---
 
