@@ -213,3 +213,30 @@ def stable_expm1(x):
     # Use the polynomial when |x| < 1e-2.
     return (x.abs() < 1e-2).where(poly, direct)
 
+# Step 7 - quantize
+def quantize(x, precision):
+    # Keep the tensor unchanged for full float32 precision.
+    if precision == "fp32":
+        return x
+
+    if precision == "bf16":
+        # Reinterpret float32 values as their 32-bit unsigned bit patterns.
+        bits = x.bitcast(dtypes.uint32)
+
+        # Round to nearest, ties to even.
+        # Keep the upper 16 bits and use the lowest retained bit to
+        # correctly handle halfway cases.
+        rounding_bias = 0x7FFF + ((bits >> 16) & 1)
+        rounded_bits = (bits + rounding_bias) & 0xFFFF0000
+
+        # Reinterpret the rounded bit patterns as float32 values.
+        rounded = rounded_bits.bitcast(dtypes.float32)
+
+        # Straight-through estimator:
+        # Forward value equals the rounded value, while the gradient
+        # passes through as the identity.
+        return x + (rounded - x).detach()
+
+    # Reject unsupported precision modes.
+    raise ValueError(f"Unsupported precision: {precision}")
+
