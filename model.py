@@ -215,29 +215,30 @@ def stable_expm1(x):
 
 # Step 7 - quantize
 def quantize(x, precision):
-    # Keep the tensor unchanged for full float32 precision.
+    # Full float32 precision: return the tensor unchanged.
     if precision == "fp32":
         return x
 
     if precision == "bf16":
-        # Reinterpret float32 values as their 32-bit unsigned bit patterns.
+        # Reinterpret the float32 values as unsigned 32-bit integers.
         bits = x.bitcast(dtypes.uint32)
 
         # Round to nearest, ties to even.
-        # Keep the upper 16 bits and use the lowest retained bit to
-        # correctly handle halfway cases.
+        # The lowest retained bit determines the correct tie-breaking bias.
         rounding_bias = 0x7FFF + ((bits >> 16) & 1)
+
+        # Round the upper 16 bits and clear the lower 16 bits.
         rounded_bits = (bits + rounding_bias) & 0xFFFF0000
 
-        # Reinterpret the rounded bit patterns as float32 values.
+        # Interpret the rounded bit patterns as float32 values.
+        # This emulates a bf16 storage round-trip.
         rounded = rounded_bits.bitcast(dtypes.float32)
 
         # Straight-through estimator:
-        # Forward value equals the rounded value, while the gradient
-        # passes through as the identity.
+        # forward value = rounded; backward gradient = identity.
         return x + (rounded - x).detach()
 
-    # Reject unsupported precision modes.
+    # Reject unsupported precision formats.
     raise ValueError(f"Unsupported precision: {precision}")
 
 # Step 8 - precision_cliff
