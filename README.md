@@ -11,6 +11,7 @@ python scaffold.py
 ## Steps
 
 - [x] **1.** modular_addition_dataset
+- [x] **2.** one_hot_batch
 
 ---
 

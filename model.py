@@ -55,3 +55,16 @@ def modular_addition_dataset(p, train_frac=0.5, seed=0):
         "p": p,
     }
 
+# Step 2 - one_hot_batch
+def one_hot_batch(x, y, p):
+    # Encode the three input tokens using a vocabulary of p + 1 symbols.
+    # The extra symbol, p, represents the "=" token.
+    inputs = np.eye(p + 1, dtype=np.float32)[x]
+
+    # Encode the labels using p possible output classes.
+    targets = np.eye(p, dtype=np.float32)[y]
+
+    return inputs.astype(np.float32, copy=False), targets.astype(
+        np.float32, copy=False
+    )
+
