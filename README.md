@@ -15,6 +15,7 @@ python scaffold.py
 - [x] **3.** GrokTransformer
 - [x] **4.** accuracy
 - [x] **5.** stable_log1p
+- [x] **6.** stable_expm1
 
 ---
 

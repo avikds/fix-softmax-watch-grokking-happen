@@ -197,3 +197,19 @@ def stable_log1p(x):
     # for the inputs targeted by this function.
     return (x.abs() < 1e-2).where(poly, direct)
 
+# Step 6 - stable_expm1
+def stable_expm1(x):
+    # Taylor approximation of exp(x) - 1 for small |x|.
+    # This avoids cancellation when exp(x) rounds close to 1.
+    x2 = x * x
+    x3 = x2 * x
+    x4 = x3 * x
+
+    poly = x + x2 / 2 + x3 / 6 + x4 / 24
+
+    # Direct computation for values that are not close to zero.
+    direct = x.exp() - 1
+
+    # Use the polynomial when |x| < 1e-2.
+    return (x.abs() < 1e-2).where(poly, direct)
+
