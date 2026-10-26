@@ -30,6 +30,7 @@ python scaffold.py
 - [x] **18.** adamw_update
 - [x] **19.** GrokTrainer
 - [x] **20.** train_run
+- [x] **21.** find_spikes
 
 ---
 

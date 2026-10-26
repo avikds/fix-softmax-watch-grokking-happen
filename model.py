@@ -815,3 +815,22 @@ def train_run(
         "trainer": trainer,
     }
 
+# Step 21 - find_spikes
+def find_spikes(losses, factor=10.0, min_loss=1e-5, start=100, gap=50):
+    spikes = []
+
+    # Examine each loss value from the specified starting step.
+    for s in range(max(1, start), len(losses)):
+        current_loss = losses[s]
+        previous_loss = losses[s - 1]
+
+        # A spike requires both a sufficiently large relative jump
+        # and an absolute loss above the minimum threshold.
+        if current_loss > factor * previous_loss and current_loss > min_loss:
+            # Merge nearby jumps into the same event, retaining
+            # the step index of the first jump in each event.
+            if not spikes or s - spikes[-1] > gap:
+                spikes.append(s)
+
+    return spikes
+
