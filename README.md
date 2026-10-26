@@ -21,6 +21,7 @@ python scaffold.py
 - [x] **9.** cross_entropy_standard
 - [x] **10.** logit_margin
 - [x] **11.** cross_entropy_fixed
+- [x] **12.** cross_entropy_stablemax
 
 ---
 

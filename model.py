@@ -339,3 +339,34 @@ def cross_entropy_fixed(logits, targets, precision="fp32"):
 
     return loss, grad
 
+# Step 12 - cross_entropy_stablemax
+def cross_entropy_stablemax(logits, targets):
+    # StableMax activation:
+    # s(x) = x + 1 for x >= 0, otherwise 1 / (1 - x).
+    nonnegative = logits >= 0
+    s = nonnegative.where(logits + 1, 1 / (1 - logits))
+
+    # Derivative of the StableMax activation.
+    # s'(x) = 1 for x >= 0, otherwise 1 / (1 - x)^2.
+    ds = nonnegative.where(
+        Tensor.ones_like(logits),
+        1 / ((1 - logits) * (1 - logits)),
+    )
+
+    # Sum the StableMax activations across classes.
+    # Shape: (n, 1).
+    S = s.sum(axis=-1, keepdim=True)
+
+    # Compute the target activation sum.
+    # For one-hot targets, this selects the target class activation.
+    s_t = (s * targets).sum(axis=-1, keepdim=True)
+
+    # StableMax cross-entropy loss for each example.
+    # Reshape from (n, 1) to (n,).
+    loss = (S.log() - s_t.log()).reshape(logits.shape[0])
+
+    # Analytical gradient with respect to the logits.
+    grad = ds / S - targets * ds / s_t
+
+    return loss, grad
+
