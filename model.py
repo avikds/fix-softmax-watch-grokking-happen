@@ -257,3 +257,35 @@ def precision_cliff(precision):
     # The cliff is bits * ln(2).
     return float(significand_bits[precision] * math.log(2))
 
+# Step 9 - cross_entropy_standard
+def cross_entropy_standard(logits, targets, precision="fp32"):
+    # Q emulates the requested floating-point precision.
+    Q = lambda v: quantize(v, precision)
+
+    # Quantize the input logits.
+    z = Q(logits)
+
+    # Subtract the maximum logit for numerical stability.
+    z_max = z.max(axis=-1, keepdim=True)
+    zs = Q(z - z_max)
+
+    # Compute and quantize the exponentials and their sum.
+    e = Q(zs.exp())
+    s = Q(e.sum(axis=-1, keepdim=True))
+
+    # Compute log-probabilities, quantizing the logarithm and subtraction.
+    log_s = Q(s.log())
+    log_probs = Q(zs - log_s)
+
+    # Compute the softmax probabilities.
+    probs = Q(e / s)
+
+    # Cross-entropy loss for each example, with shape (n,).
+    loss = -(log_probs * targets).sum(axis=-1)
+
+    # Exact analytical gradient of the standard cross-entropy
+    # with respect to the logits, with shape (n, K).
+    grad = probs - targets
+
+    return loss, grad
+

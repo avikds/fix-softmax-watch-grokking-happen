@@ -18,6 +18,7 @@ python scaffold.py
 - [x] **6.** stable_expm1
 - [x] **7.** quantize
 - [x] **8.** precision_cliff
+- [x] **9.** cross_entropy_standard
 
 ---
 
