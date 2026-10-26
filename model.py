@@ -161,3 +161,20 @@ class GrokTransformer:
         # Return unnormalized class logits with shape (n, p).
         return x @ self.wout + self.bout
 
+# Step 4 - accuracy
+def accuracy(model, x, y, p):
+    # Convert input tokens and labels into float32 one-hot arrays.
+    inputs, targets = one_hot_batch(x, y, p)
+
+    # Run a standard forward pass without JIT compilation or backpropagation.
+    logits = model(Tensor(inputs))
+
+    # Select the class with the highest logit for each example.
+    predictions = logits.argmax(axis=-1).numpy()
+
+    # Recover the ground-truth class labels from the one-hot targets.
+    actual = np.argmax(targets, axis=-1)
+
+    # Return the fraction of correctly classified examples as a Python float.
+    return float(np.mean(predictions == actual))
+
