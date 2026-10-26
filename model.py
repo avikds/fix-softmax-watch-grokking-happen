@@ -965,7 +965,6 @@ def equilibrium_experiment(
 # Step 24 - distillation_experiment
 from tinygrad.nn.state import get_state_dict
 
-
 def kl_from_logits(z_teacher, z_student, temperature=1.0):
     # KL divergence requires a positive temperature.
     if temperature <= 0:
