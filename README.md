@@ -12,6 +12,7 @@ python scaffold.py
 
 - [x] **1.** modular_addition_dataset
 - [x] **2.** one_hot_batch
+- [x] **3.** GrokTransformer
 
 ---
 
