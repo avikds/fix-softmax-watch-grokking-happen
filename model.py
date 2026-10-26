@@ -445,3 +445,42 @@ def soft_cross_entropy_fixed(
 
     return loss, grad
 
+# Step 16 - residual_gradient
+def residual_gradient(teacher_logits, temperature=1.0, precision="fp32"):
+    # Create an independent student tensor with values identical to the teacher.
+    student = Tensor(teacher_logits.numpy().copy())
+
+    # Standard soft-target cross-entropy: let tinygrad compute the gradient
+    # automatically with respect to the student logits.
+    standard_loss, _ = soft_cross_entropy_standard(
+        student,
+        teacher_logits,
+        temperature=temperature,
+        precision=precision,
+    )
+
+    standard_grad = standard_loss.sum().gradient(student)[0]
+
+    # Measure the maximum absolute autodiff gradient.
+    standard_residual = float(
+        np.max(np.abs(standard_grad.numpy()))
+    )
+
+    # Fixed soft-target cross-entropy: use the explicitly returned gradient.
+    _, fixed_grad = soft_cross_entropy_fixed(
+        student,
+        teacher_logits,
+        temperature=temperature,
+        precision=precision,
+    )
+
+    # Measure the maximum absolute custom gradient.
+    fixed_residual = float(
+        np.max(np.abs(fixed_grad.numpy()))
+    )
+
+    return {
+        "standard": standard_residual,
+        "fixed": fixed_residual,
+    }
+
