@@ -36,6 +36,40 @@ python scaffold.py
 - [x] **24.** distillation_experiment
 - [x] **25.** softmax_fix_report
 
----
+## Results
 
-Built on Deep-ML.
+```
+1. Softmax Collapse on one vector: z = [9, -9, -9], target 0 (fp32)
+   standard  loss 0.000e+00  grad [0.000e+00, 1.523e-08, 1.523e-08]  sum 3.046e-08
+   fixed     loss 3.046e-08  grad [-3.046e-08, 1.523e-08, 1.523e-08]  sum 0.000e+00
+   The standard target gradient is exactly 0 and the gradient no longer sums to zero; the fixed loss keeps both.
+   Precision cliffs (margin where 1 + e^-m rounds to 1): bf16 5.5, fp32 16.6, fp64 36.7
+   Soft-target residual gradient at student == teacher (T = 4, 64 random rows): fp32: standard 0.0e+00 / fixed 0e+00, bf16: standard 8.9e-05 / fixed 0e+00
+
+2. Slingshot: a+b mod 31, 3000 full-batch AdamW steps, fp32, eps 1e-8, weight decay 1.0, lr 0.003
+   standard  spikes at [1340, 2489]  max margin 16.89  final margin 10.72  max collapsed examples 278/480  train acc 1.000  test acc 0.996
+   fixed     spikes at []  max margin 17.16  final margin 17.09  max collapsed examples 0/480  train acc 1.000  test acc 1.000
+   Standard loss: margins reach the fp32 cliff (16.6), most examples lose their target gradient, the loss spikes and margins crash.
+   Over seeds 0-2: standard spikes at 1268-1312 and 2440-2697, 247-290 collapsed examples, final margin 6-10;
+   fixed: no spike, 0 collapsed examples, final margin 16.6-17.1.
+   Test accuracy of the fixed arm every 500 steps: 0.28 -> 0.52 -> 0.91 -> 1.00 -> 1.00 -> 1.00
+   Grokking within 3000 steps depends on the seed: seeds 0 and 1 reach 1.0 under both losses, seed 2 is at 0.47 under both.
+   The paper's accuracy gap (94% vs 100% over 10,000 epochs) is not measured in this budget; the spikes, counts and margins are.
+
+3. Emulated bf16, standard loss, 1000 steps
+   spikes at [779]  max margin 6.07 (cliff 5.5)  max collapsed 377  test acc 0.624
+   Margins are pinned under the bf16 cliff and the run spikes every few hundred steps (seeds 0-2: 2-4 spikes in 1000 steps, max margin 5.9-6.9, 371-372 collapsed).
+
+4. Margin equilibrium of the fixed loss vs AdamW's epsilon (prediction: log(1/eps))
+   eps 1e-08: final margin 17.09  predicted 18.42  spikes []  test acc 1.000
+   eps 1e-12: final margin 26.76  predicted 27.63  spikes []  test acc 1.000
+   Four orders of magnitude in eps move the margin by 9.67 (prediction 9.21); over seeds 0-2: 16.6-17.1 vs 26.0-26.7.
+
+5. Distillation drift: student initialised at the fixed-loss teacher, T = 4, Adam lr 2e-3, 300 steps
+   standard  KL max 4.82e-03  KL final 4.22e-05  max parameter drift 2.85e-02  train acc 1.000  test acc 1.000
+   fixed     KL max 0.00e+00  KL final 0.00e+00  max parameter drift 0.00e+00  train acc 1.000  test acc 1.000
+   The standard loss's residual gradient is normalised by Adam into real steps (seeds 0-2: KL max 3.8e-3 to 5.8e-3, drift 0.031-0.037);
+   the fixed loss returns exactly 0 and the weights never move.
+
+study finished in 43 s
+```
