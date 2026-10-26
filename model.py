@@ -240,3 +240,20 @@ def quantize(x, precision):
     # Reject unsupported precision modes.
     raise ValueError(f"Unsupported precision: {precision}")
 
+# Step 8 - precision_cliff
+def precision_cliff(precision):
+    # Number of significand bits, including the implicit leading bit.
+    significand_bits = {
+        "bf16": 8,
+        "fp16": 11,
+        "fp32": 24,
+        "fp64": 53,
+    }
+
+    # Reject unsupported precision formats.
+    if precision not in significand_bits:
+        raise ValueError(f"Unsupported precision: {precision}")
+
+    # The cliff is bits * ln(2).
+    return float(significand_bits[precision] * math.log(2))
+

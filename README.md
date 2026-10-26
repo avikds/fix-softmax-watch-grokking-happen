@@ -17,6 +17,7 @@ python scaffold.py
 - [x] **5.** stable_log1p
 - [x] **6.** stable_expm1
 - [x] **7.** quantize
+- [x] **8.** precision_cliff
 
 ---
 
