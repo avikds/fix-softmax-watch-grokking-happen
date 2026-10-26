@@ -70,7 +70,7 @@ def one_hot_batch(x, y, p):
 
 # Step 3 - GrokTransformer
 import math
-from tinygrad import Tensor
+from tinygrad import Tensor, dtypes
 
 class GrokTransformer:
     def __init__(self, p, d_model=64, n_heads=4, seed=0):
