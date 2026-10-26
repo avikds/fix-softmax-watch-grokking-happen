@@ -834,3 +834,69 @@ def find_spikes(losses, factor=10.0, min_loss=1e-5, start=100, gap=50):
 
     return spikes
 
+# Step 22 - slingshot_experiment
+def slingshot_experiment(
+    seed=0,
+    steps=3000,
+    precision="fp32",
+    eps=1e-8,
+    p=31,
+    d_model=64,
+    n_heads=4,
+    lr=3e-3,
+    weight_decay=1.0,
+    train_frac=0.5,
+    eval_every=100,
+    losses=("standard", "fixed"),
+):
+    # Create one dataset and reuse the exact same train/test split.
+    data = modular_addition_dataset(
+        p=p,
+        train_frac=train_frac,
+        seed=seed,
+    )
+
+    # Select the required loss implementations.
+    loss_functions = {
+        "standard": cross_entropy_standard,
+        "fixed": cross_entropy_fixed,
+    }
+
+    results = {}
+
+    for name in losses:
+        if name not in loss_functions:
+            raise ValueError(f"Unsupported loss: {name}")
+
+        # Initialize a fresh model with the same seed for a fair comparison.
+        model = GrokTransformer(
+            p,
+            d_model=d_model,
+            n_heads=n_heads,
+            seed=seed,
+        )
+
+        # Train using the selected loss and experiment configuration.
+        history = train_run(
+            model=model,
+            loss_fn=loss_functions[name],
+            data=data,
+            steps=steps,
+            lr=lr,
+            weight_decay=weight_decay,
+            eps=eps,
+            precision=precision,
+            eval_every=eval_every,
+        )
+
+        # Detect Slingshot events from the recorded training-loss curve.
+        history["spikes"] = find_spikes(history["loss"])
+
+        # Store the full history under the loss name.
+        results[name] = history
+
+    # Include the shared dataset for downstream analysis.
+    results["data"] = data
+
+    return results
+
