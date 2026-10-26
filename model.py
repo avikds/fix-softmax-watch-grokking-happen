@@ -1148,3 +1148,227 @@ def distillation_experiment(
 
     return results
 
+# Step 25 - softmax_fix_report
+import time
+
+
+def softmax_fix_report(
+    seed=0,
+    steps=3000,
+    eq_steps=2500,
+    bf16_steps=1000,
+    distill_steps=300,
+    p=31,
+    d_model=64,
+    n_heads=4,
+    lr=3e-3,
+    weight_decay=1.0,
+    train_frac=0.5,
+    experiments=(
+        "collapse",
+        "slingshot",
+        "bf16",
+        "equilibrium",
+        "distillation",
+    ),
+):
+    # Measure the total wall-clock time of the report.
+    start_time = time.perf_counter()
+
+    # Store the configuration used for reproducibility.
+    config = {
+        "seed": seed,
+        "steps": steps,
+        "eq_steps": eq_steps,
+        "bf16_steps": bf16_steps,
+        "distill_steps": distill_steps,
+        "p": p,
+        "d_model": d_model,
+        "n_heads": n_heads,
+        "lr": lr,
+        "weight_decay": weight_decay,
+        "train_frac": train_frac,
+        "experiments": tuple(experiments),
+    }
+
+    report = {}
+    slingshot_result = None
+
+    # ---------------------------------------------------------
+    # 1. Vector-level Softmax Collapse and cancellation checks
+    # ---------------------------------------------------------
+    if "collapse" in experiments:
+        # Target class is class 0.
+        z = Tensor([[9.0, -9.0, -9.0]])
+        targets = Tensor([[1.0, 0.0, 0.0]])
+
+        collapse = {}
+
+        # Compare standard and fixed hard-target cross-entropy.
+        loss_standard, grad_standard = cross_entropy_standard(
+            z, targets, precision="fp32"
+        )
+        loss_fixed, grad_fixed = cross_entropy_fixed(
+            z, targets, precision="fp32"
+        )
+
+        for name, loss, grad in (
+            ("standard", loss_standard, grad_standard),
+            ("fixed", loss_fixed, grad_fixed),
+        ):
+            grad_array = grad.numpy()
+
+            collapse[name] = {
+                "loss": float(loss.numpy()[0]),
+                "grad": [
+                    float(value) for value in grad_array[0]
+                ],
+                "grad_sum": float(grad_array.sum()),
+            }
+
+        # Precision cliffs for the requested floating-point formats.
+        collapse["cliffs"] = {
+            name: precision_cliff(name)
+            for name in ("bf16", "fp32", "fp64")
+        }
+
+        # Use a seeded random probe so the residual-gradient test
+        # is repeatable for a given seed.
+        rng = np.random.default_rng(seed)
+        z_rand = Tensor(
+            rng.normal(
+                0.0,
+                5.0,
+                size=(4, p),
+            ).astype(np.float32)
+        )
+
+        # Measure soft-target cancellation in fp32 and emulated bf16.
+        collapse["residual"] = {
+            prec: residual_gradient(z_rand, 4.0, prec)
+            for prec in ("fp32", "bf16")
+        }
+
+        report["collapse"] = collapse
+
+    # ---------------------------------------------------------
+    # 2. Standard versus fixed loss in fp32
+    # ---------------------------------------------------------
+    if "slingshot" in experiments:
+        slingshot_result = slingshot_experiment(
+            seed=seed,
+            steps=steps,
+            precision="fp32",
+            eps=1e-8,
+            p=p,
+            d_model=d_model,
+            n_heads=n_heads,
+            lr=lr,
+            weight_decay=weight_decay,
+            train_frac=train_frac,
+        )
+
+        report["slingshot"] = slingshot_result
+
+    # ---------------------------------------------------------
+    # 3. Standard loss in emulated bf16
+    # ---------------------------------------------------------
+    if "bf16" in experiments:
+        report["bf16"] = slingshot_experiment(
+            seed=seed,
+            steps=bf16_steps,
+            precision="bf16",
+            eps=1e-8,
+            p=p,
+            d_model=d_model,
+            n_heads=n_heads,
+            lr=lr,
+            weight_decay=weight_decay,
+            train_frac=train_frac,
+            losses=("standard",),
+        )
+
+    # ---------------------------------------------------------
+    # 4. Fixed-loss margin equilibrium for two AdamW epsilons
+    # ---------------------------------------------------------
+    if "equilibrium" in experiments:
+        equilibrium_args = {
+            "seed": seed,
+            "eps_values": (1e-8, 1e-12),
+            "steps": eq_steps,
+            "precision": "fp32",
+            "p": p,
+            "d_model": d_model,
+            "n_heads": n_heads,
+            "lr": lr,
+            "weight_decay": weight_decay,
+            "train_frac": train_frac,
+        }
+
+        # Reuse the already-computed fixed-loss history when available.
+        if slingshot_result is not None:
+            equilibrium_args["precomputed"] = {
+                1e-8: slingshot_result["fixed"]
+            }
+
+        report["equilibrium"] = equilibrium_experiment(
+            **equilibrium_args
+        )
+
+    # ---------------------------------------------------------
+    # 5. Distillation drift from a trained teacher
+    # ---------------------------------------------------------
+    if "distillation" in experiments:
+        if slingshot_result is not None:
+            # Reuse the trained fixed-loss model and its exact data split.
+            data = slingshot_result["data"]
+            teacher = slingshot_result["fixed"]["trainer"].model
+
+        else:
+            # If the fp32 Slingshot comparison was not requested,
+            # train a fixed-loss teacher specifically for distillation.
+            data = modular_addition_dataset(
+                p=p,
+                train_frac=train_frac,
+                seed=seed,
+            )
+
+            teacher_model = GrokTransformer(
+                p,
+                d_model=d_model,
+                n_heads=n_heads,
+                seed=seed,
+            )
+
+            teacher_history = train_run(
+                model=teacher_model,
+                loss_fn=cross_entropy_fixed,
+                data=data,
+                steps=steps,
+                lr=lr,
+                weight_decay=weight_decay,
+                eps=1e-8,
+                precision="fp32",
+                eval_every=100,
+            )
+
+            teacher = teacher_history["trainer"].model
+
+        report["distillation"] = distillation_experiment(
+            teacher,
+            data,
+            seed,
+            distill_steps,
+            4.0,
+        )
+
+    # ---------------------------------------------------------
+    # Report metadata
+    # ---------------------------------------------------------
+    report["config"] = config
+    report["seconds"] = float(
+        time.perf_counter() - start_time
+    )
+
+    return report
+

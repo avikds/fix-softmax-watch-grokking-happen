@@ -34,6 +34,7 @@ python scaffold.py
 - [x] **22.** slingshot_experiment
 - [x] **23.** equilibrium_experiment
 - [x] **24.** distillation_experiment
+- [x] **25.** softmax_fix_report
 
 ---
 
