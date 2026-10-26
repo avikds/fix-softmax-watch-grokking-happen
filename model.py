@@ -1172,10 +1172,9 @@ def softmax_fix_report(
         "distillation",
     ),
 ):
-    # Measure the total wall-clock time of the report.
+    # Measure the wall-clock time for the complete report.
     start_time = time.perf_counter()
 
-    # Store the configuration used for reproducibility.
     config = {
         "seed": seed,
         "steps": steps,
@@ -1195,10 +1194,9 @@ def softmax_fix_report(
     slingshot_result = None
 
     # ---------------------------------------------------------
-    # 1. Vector-level Softmax Collapse and cancellation checks
+    # 1. Vector-level Softmax Collapse and Softmax Cancellation
     # ---------------------------------------------------------
     if "collapse" in experiments:
-        # Target class is class 0.
         z = Tensor([[9.0, -9.0, -9.0]])
         targets = Tensor([[1.0, 0.0, 0.0]])
 
@@ -1212,47 +1210,50 @@ def softmax_fix_report(
             z, targets, precision="fp32"
         )
 
-        for name, loss, grad in (
+        for name, loss_value, grad in (
             ("standard", loss_standard, grad_standard),
             ("fixed", loss_fixed, grad_fixed),
         ):
             grad_array = grad.numpy()
 
             collapse[name] = {
-                "loss": float(loss.numpy()[0]),
+                "loss": float(loss_value.numpy()[0]),
                 "grad": [
                     float(value) for value in grad_array[0]
                 ],
                 "grad_sum": float(grad_array.sum()),
             }
 
-        # Precision cliffs for the requested floating-point formats.
+        # Precision cliffs for the requested formats.
         collapse["cliffs"] = {
             name: precision_cliff(name)
             for name in ("bf16", "fp32", "fp64")
         }
 
-        # Use a seeded random probe so the residual-gradient test
-        # is repeatable for a given seed.
+        # Generate 64 rows, matching the project's specified probe.
         rng = np.random.default_rng(seed)
         z_rand = Tensor(
             rng.normal(
                 0.0,
                 5.0,
-                size=(4, p),
+                size=(64, p),
             ).astype(np.float32)
         )
 
-        # Measure soft-target cancellation in fp32 and emulated bf16.
+        # Measure residual gradients for both emulated precisions.
         collapse["residual"] = {
-            prec: residual_gradient(z_rand, 4.0, prec)
-            for prec in ("fp32", "bf16")
+            precision: residual_gradient(
+                z_rand,
+                temperature=4.0,
+                precision=precision,
+            )
+            for precision in ("fp32", "bf16")
         }
 
         report["collapse"] = collapse
 
     # ---------------------------------------------------------
-    # 2. Standard versus fixed loss in fp32
+    # 2. Slingshot comparison in fp32
     # ---------------------------------------------------------
     if "slingshot" in experiments:
         slingshot_result = slingshot_experiment(
@@ -1271,7 +1272,7 @@ def softmax_fix_report(
         report["slingshot"] = slingshot_result
 
     # ---------------------------------------------------------
-    # 3. Standard loss in emulated bf16
+    # 3. Standard loss with emulated bf16 precision
     # ---------------------------------------------------------
     if "bf16" in experiments:
         report["bf16"] = slingshot_experiment(
@@ -1289,7 +1290,7 @@ def softmax_fix_report(
         )
 
     # ---------------------------------------------------------
-    # 4. Fixed-loss margin equilibrium for two AdamW epsilons
+    # 4. Fixed-loss margin equilibrium
     # ---------------------------------------------------------
     if "equilibrium" in experiments:
         equilibrium_args = {
@@ -1305,7 +1306,7 @@ def softmax_fix_report(
             "train_frac": train_frac,
         }
 
-        # Reuse the already-computed fixed-loss history when available.
+        # Reuse the fixed-loss training history if that experiment ran.
         if slingshot_result is not None:
             equilibrium_args["precomputed"] = {
                 1e-8: slingshot_result["fixed"]
@@ -1316,17 +1317,17 @@ def softmax_fix_report(
         )
 
     # ---------------------------------------------------------
-    # 5. Distillation drift from a trained teacher
+    # 5. Distillation drift
     # ---------------------------------------------------------
     if "distillation" in experiments:
         if slingshot_result is not None:
-            # Reuse the trained fixed-loss model and its exact data split.
+            # Reuse the trained fixed-loss model and dataset.
             data = slingshot_result["data"]
             teacher = slingshot_result["fixed"]["trainer"].model
 
         else:
-            # If the fp32 Slingshot comparison was not requested,
-            # train a fixed-loss teacher specifically for distillation.
+            # Train a fixed-loss teacher if the Slingshot experiment
+            # was not requested.
             data = modular_addition_dataset(
                 p=p,
                 train_frac=train_frac,
@@ -1355,16 +1356,14 @@ def softmax_fix_report(
             teacher = teacher_history["trainer"].model
 
         report["distillation"] = distillation_experiment(
-            teacher,
-            data,
-            seed,
-            distill_steps,
-            4.0,
+            teacher=teacher,
+            data=data,
+            seed=seed,
+            steps=distill_steps,
+            temperature=4.0,
         )
 
-    # ---------------------------------------------------------
-    # Report metadata
-    # ---------------------------------------------------------
+    # Include the configuration and total elapsed time.
     report["config"] = config
     report["seconds"] = float(
         time.perf_counter() - start_time
