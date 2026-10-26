@@ -27,6 +27,7 @@ python scaffold.py
 - [x] **15.** soft_cross_entropy_fixed
 - [x] **16.** residual_gradient
 - [x] **17.** init_adamw_state
+- [x] **18.** adamw_update
 
 ---
 

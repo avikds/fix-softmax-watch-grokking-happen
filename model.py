@@ -507,3 +507,40 @@ def init_adamw_state(params):
         "t": t,
     }
 
+# Step 18 - adamw_update
+def adamw_update(
+    params,
+    grads,
+    state,
+    lr,
+    weight_decay=1.0,
+    eps=1e-8,
+    betas=(0.9, 0.98),
+):
+    b1, b2 = betas
+
+    # Increment the optimizer step counter.
+    t = state["t"].assign(state["t"] + 1)
+
+    # Compute bias-correction factors.
+    bc1 = 1 - b1 ** t
+    bc2 = 1 - b2 ** t
+
+    # Update each parameter and its first- and second-moment buffers.
+    for q, g, m, v in zip(
+        params, grads, state["m"], state["v"]
+    ):
+        m.assign(b1 * m + (1 - b1) * g)
+        v.assign(b2 * v + (1 - b2) * g * g)
+
+        # Bias-corrected Adam update plus decoupled weight decay.
+        update = (
+            (m / bc1) / ((v / bc2).sqrt() + eps)
+            + weight_decay * q
+        )
+
+        q.assign(q - lr * update)
+
+    # Return every updated tensor so the caller can realize them together.
+    return [t] + state["m"] + state["v"] + list(params)
+
