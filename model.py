@@ -962,3 +962,190 @@ def equilibrium_experiment(
 
     return results
 
+# Step 24 - distillation_experiment
+from tinygrad.nn.state import get_state_dict
+
+
+def kl_from_logits(z_teacher, z_student, temperature=1.0):
+    # KL divergence requires a positive temperature.
+    if temperature <= 0:
+        raise ValueError("temperature must be positive.")
+
+    # Convert inputs to NumPy float64 arrays for accurate KL measurement.
+    if isinstance(z_teacher, Tensor):
+        z_teacher = z_teacher.numpy()
+    if isinstance(z_student, Tensor):
+        z_student = z_student.numpy()
+
+    z_teacher = np.asarray(z_teacher, dtype=np.float64)
+    z_student = np.asarray(z_student, dtype=np.float64)
+
+    # Apply temperature scaling.
+    teacher_scaled = z_teacher / temperature
+    student_scaled = z_student / temperature
+
+    # Compute stable log-softmax values using log-sum-exp.
+    log_p = teacher_scaled - np.logaddexp.reduce(
+        teacher_scaled, axis=-1, keepdims=True
+    )
+    log_q = student_scaled - np.logaddexp.reduce(
+        student_scaled, axis=-1, keepdims=True
+    )
+
+    # Teacher probability distribution.
+    p = np.exp(log_p)
+
+    # KL(p || q), summed across classes and averaged across examples.
+    kl_per_example = np.sum(p * (log_p - log_q), axis=-1)
+
+    return float(np.mean(kl_per_example))
+
+
+def distillation_experiment(
+    teacher,
+    data,
+    seed=0,
+    steps=300,
+    temperature=4.0,
+    lr=2e-3,
+    eps=1e-8,
+    precision="fp32",
+    kl_every=10,
+):
+    if kl_every <= 0:
+        raise ValueError("kl_every must be a positive integer.")
+
+    p = data["p"]
+
+    # Encode the training data and realize the input and dummy targets.
+    x_train, y_train = one_hot_batch(
+        data["x_train"], data["y_train"], p
+    )
+    X = Tensor(x_train).realize()
+    T_dummy = Tensor(y_train).realize()
+
+    # Save independent NumPy copies of the teacher's parameters.
+    teacher_arrays = {
+        name: tensor.numpy().copy()
+        for name, tensor in get_state_dict(teacher).items()
+    }
+
+    results = {}
+
+    # Compare standard and fixed soft-target cross-entropy.
+    loss_functions = (
+        ("standard", soft_cross_entropy_standard),
+        ("fixed", soft_cross_entropy_fixed),
+    )
+
+    for name, loss_fn in loss_functions:
+        # Create a fresh student with the same architecture as the teacher.
+        student = GrokTransformer(
+            p,
+            teacher.d_model,
+            teacher.n_heads,
+            seed,
+        )
+
+        # Copy the teacher's weights into the corresponding student tensors.
+        student_state = get_state_dict(student)
+
+        if set(student_state) != set(teacher_arrays):
+            raise ValueError(
+                "Student and teacher parameter names do not match."
+            )
+
+        for param_name, teacher_array in teacher_arrays.items():
+            student_state[param_name].assign(
+                Tensor(teacher_array)
+            ).realize()
+
+        # Use no weight decay for the distillation experiment.
+        trainer = GrokTrainer(
+            student,
+            lambda z, zt, prec: loss_fn(
+                z, zt, temperature, prec
+            ),
+            lr=lr,
+            weight_decay=0.0,
+            eps=eps,
+            precision=precision,
+        )
+
+        # Obtain the teacher logits through the compiled training step.
+        # T_dummy is used only to trigger the forward pass.
+        z_teacher = trainer.snapshot_logits(X, T_dummy)
+        ZT = Tensor(z_teacher).realize()
+
+        # Track KL divergence during student training.
+        kl = []
+
+        for s in range(steps):
+            trainer.step(X, ZT)
+
+            if (s + 1) % kl_every == 0:
+                student_logits = trainer.last_logits.numpy()
+
+                kl_value = kl_from_logits(
+                    z_teacher,
+                    student_logits,
+                    temperature,
+                )
+
+                kl.append((s + 1, kl_value))
+
+        # Snapshot the final student logits without applying a parameter update.
+        z_final = trainer.snapshot_logits(X, ZT)
+
+        # Maximum absolute parameter difference from the original teacher.
+        final_student_state = get_state_dict(student)
+
+        param_drift = max(
+            (
+                float(
+                    np.max(
+                        np.abs(
+                            final_student_state[param_name].numpy()
+                            - teacher_array
+                        )
+                    )
+                )
+                for param_name, teacher_array in teacher_arrays.items()
+            ),
+            default=0.0,
+        )
+
+        # Record the final KL divergence and accuracy measurements.
+        kl_final = kl_from_logits(
+            z_teacher,
+            z_final,
+            temperature,
+        )
+
+        final_train_acc = accuracy(
+            student,
+            data["x_train"],
+            data["y_train"],
+            p,
+        )
+
+        final_test_acc = accuracy(
+            student,
+            data["x_test"],
+            data["y_test"],
+            p,
+        )
+
+        results[name] = {
+            "kl": kl,
+            "kl_max": float(
+                max((value for _, value in kl), default=0.0)
+            ),
+            "kl_final": kl_final,
+            "param_drift": param_drift,
+            "final_train_acc": final_train_acc,
+            "final_test_acc": final_test_acc,
+        }
+
+    return results
+

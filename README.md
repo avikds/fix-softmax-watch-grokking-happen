@@ -33,6 +33,7 @@ python scaffold.py
 - [x] **21.** find_spikes
 - [x] **22.** slingshot_experiment
 - [x] **23.** equilibrium_experiment
+- [x] **24.** distillation_experiment
 
 ---
 
