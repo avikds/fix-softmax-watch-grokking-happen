@@ -215,7 +215,7 @@
               
             </div>
           
-            <div class="part-reveal" style="opacity: 0.6">
+            <div class="part-reveal" style="opacity: 1">
               <h3 class="part-title">Part 2: Two Cross-Entropies</h3>
               <p class="part-description">The standard log-softmax cross-entropy with its exact gradient, written so you can watch the target gradient round to exactly 0 past a precision cliff (Softmax Collapse), and the paper&#39;s fix: shift by the target logit, keep the margin in log space with a stable log1p, and get a gradient that sums to zero by construction. A bf16 emulation by rounding casts, the cliff formula, the logit margin, and two baselines from the literature: StableMax and zero-sum projection.</p>
               

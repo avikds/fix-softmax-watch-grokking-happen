@@ -178,3 +178,22 @@ def accuracy(model, x, y, p):
     # Return the fraction of correctly classified examples as a Python float.
     return float(np.mean(predictions == actual))
 
+# Step 5 - stable_log1p
+def stable_log1p(x):
+    # Taylor approximation of log(1 + x) for small |x|.
+    # This avoids forming 1 + x, which may round to exactly 1
+    # when x is very small in floating-point arithmetic.
+    x2 = x * x
+    x3 = x2 * x
+    x4 = x3 * x
+
+    poly = x - x2 / 2 + x3 / 3 - x4 / 4
+
+    # Direct computation for values that are not close to zero.
+    direct = (1 + x).log()
+
+    # Select the Taylor approximation for |x| < 1e-2.
+    # Both branches are evaluated, but neither causes an error
+    # for the inputs targeted by this function.
+    return (x.abs() < 1e-2).where(poly, direct)
+

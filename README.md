@@ -14,6 +14,7 @@ python scaffold.py
 - [x] **2.** one_hot_batch
 - [x] **3.** GrokTransformer
 - [x] **4.** accuracy
+- [x] **5.** stable_log1p
 
 ---
 
