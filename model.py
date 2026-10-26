@@ -306,3 +306,36 @@ def logit_margin(logits, targets):
     # The resulting Tensor has shape (n,).
     return z_t - logsumexp_others
 
+# Step 11 - cross_entropy_fixed
+def cross_entropy_fixed(logits, targets, precision="fp32"):
+    # Quantization function for the requested floating-point precision.
+    Q = lambda v: quantize(v, precision)
+
+    # Quantize the input logits.
+    z = Q(logits)
+
+    # Extract the target logit for each example.
+    # keepdim=True preserves shape (n, 1) for broadcasting.
+    z_t = (z * targets).sum(axis=-1, keepdim=True)
+
+    # Shift by the target logit so that the target entry is exactly zero.
+    zs = Q(z - z_t)
+
+    # Compute exponentials and explicitly zero the target entry.
+    e = Q(zs.exp()) * (1 - targets)
+
+    # Sum the exponentials of the non-target logits.
+    # This equals exp(-margin).
+    sm = Q(e.sum(axis=-1, keepdim=True))
+
+    # Compute the loss using stable log1p to preserve tiny positive values.
+    # Reshape from (n, 1) to (n,).
+    loss = stable_log1p(sm).reshape(logits.shape[0])
+
+    # Compute the gradient as ONE expression.
+    # Keeping the combined numerator avoids a numerically unsafe rewrite
+    # of the target gradient into 1 - 1/(1 + sm).
+    grad = (e - targets * sm) / (1 + sm)
+
+    return loss, grad
+
